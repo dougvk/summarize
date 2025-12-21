@@ -52,7 +52,9 @@ export const fetchTranscript = async (
   // Try manual-only mode (skip auto-generated captions, fall back to yt-dlp)
   if (mode === 'manual') {
     if (!canRunYtDlp) {
-      throw new Error('--youtube manual requires YT_DLP_PATH and OPENAI_API_KEY or FAL_KEY for fallback')
+      throw new Error(
+        '--youtube manual requires YT_DLP_PATH and OPENAI_API_KEY or FAL_KEY for fallback'
+      )
     }
     attemptedProviders.push('captionTracks')
     const manualTranscript = await fetchTranscriptFromCaptionTracks(options.fetch, {
