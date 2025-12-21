@@ -2,11 +2,11 @@
 
 ## What is this?
 
-This is a fork of [@steipete/summarize](https://github.com/steipete/summarize) - a Node.js CLI tool for summarizing any URL or file. The fork adds OpenRouter support and enhanced YouTube transcription.
+This is a fork of [@steipete/summarize](https://github.com/steipete/summarize) - a Node.js CLI tool for summarizing any URL or file. The fork adds OpenRouter support, enhanced YouTube transcription, and runs as an HTTP sidecar service.
 
 ## Why does this fork exist?
 
-This fork is being developed to integrate with [chatpod-backend](~/Documents/GitHub/chatpod-backend) as a **sidecar service** for content extraction. The goal is to use summarize's extraction capabilities (YouTube transcripts, web articles, PDFs) to feed chatpod-backend's RAG pipeline.
+This fork integrates with [chatpod-backend](~/Documents/GitHub/chatpod-backend) as a **sidecar service** for content extraction. The goal is to use summarize's extraction capabilities (YouTube transcripts, web articles, Twitter, PDFs) to feed chatpod-backend's RAG pipeline.
 
 ### Integration Architecture
 
@@ -16,155 +16,173 @@ This fork is being developed to integrate with [chatpod-backend](~/Documents/Git
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐    HTTP     ┌─────────────────────────┐   │
 │  │  chatpod    │◄───────────►│  summarize-sidecar      │   │
-│  │  backend    │   :3100     │  (Node.js + yt-dlp)     │   │
+│  │  backend    │   :3100     │  (Node + yt-dlp + bird) │   │
 │  └─────────────┘             └─────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The sidecar will run in **extract-only mode** (`--extract-only`). Chatpod-backend handles LLM summarization with its own OpenRouter service (which has `json_schema`, `reasoning`/thinking support).
+The sidecar runs as an HTTP server (`src/server.ts`) in extract-only mode. Chatpod-backend handles LLM summarization.
+
+## Supported Content Types
+
+| Type | Tool | Notes |
+|------|------|-------|
+| Web pages | Built-in (Readability) | Works out of the box |
+| YouTube (captions) | Built-in | Prefers manual over auto-generated |
+| YouTube (audio) | yt-dlp + FAL/OpenAI Whisper | For videos without captions |
+| Twitter/X | bird CLI | Requires auth cookies |
+| PDFs/Files | AI SDK | Works out of the box |
+| JS-heavy sites | Firecrawl | Optional fallback |
 
 ## Key Features Added to This Fork
 
-### 1. OpenRouter Support (`--model auto`)
+### 1. `--youtube manual` Mode
+
+Skip auto-generated captions, use only creator-uploaded captions:
+```bash
+summarize "https://youtu.be/..." --youtube manual --extract-only
+```
+Falls back to yt-dlp audio transcription if no manual captions exist.
+
+### 2. Caption Priority Fix
+
+Fixed bug where auto-generated (ASR) captions were prioritized over manual captions. Manual captions are now tried first.
+
+### 3. OpenRouter Support (`--model auto`)
 
 Context-aware model selection via OpenRouter based on input token count:
-- **< 95K tokens**: Uses `openai/gpt-oss-20b` via `groq,clarifai/fp4,google-vertex`
-- **95K-950K tokens**: Uses `google/gemini-2.5-flash-lite-preview-09-2025` via `google-ai-studio,google-vertex`
-- **> 950K tokens**: Error (no truncation)
+- **< 95K tokens**: `openai/gpt-oss-20b`
+- **95K-950K tokens**: `google/gemini-2.5-flash-lite-preview-09-2025`
 
-Configurable via environment variables:
-- `OPENROUTER_API_KEY` - Required for `--model auto`
-- `OPENROUTER_MODEL_SMALL`, `OPENROUTER_MODEL_LARGE` - Custom models
-- `OPENROUTER_THRESHOLD_SMALL`, `OPENROUTER_THRESHOLD_MAX` - Token thresholds
-- `OPENROUTER_PROVIDERS_SMALL`, `OPENROUTER_PROVIDERS_LARGE` - Provider ordering
+### 4. Bird CLI for Twitter/X
 
-### 2. yt-dlp + FAL AI Whisper Transcription
+Docker image includes bird CLI for Twitter extraction. Requires auth cookies.
 
-When YouTube captions aren't available:
-1. yt-dlp downloads audio
-2. FAL AI Whisper transcribes it
-3. Falls back to OpenAI Whisper if FAL unavailable
+### 5. HTTP Server Mode
 
-Environment variables:
-- `YT_DLP_PATH` - Path to yt-dlp binary
-- `FAL_KEY` - FAL AI API key (preferred)
-- `OPENAI_API_KEY` - OpenAI Whisper fallback
+`src/server.ts` exposes a Fastify HTTP API:
+- `POST /extract` - Extract content from URL
+- `GET /health` - Health check
+- `GET /ready` - Readiness check
 
-## How to Run
+## Docker Setup
 
-### Local Development
+### Build
+
+```bash
+docker build -f Dockerfile.test -t summarize-test .
+```
+
+### Run (Basic)
+
+```bash
+docker run --rm -p 3100:3100 summarize-test
+```
+
+### Run (Full Features)
+
+```bash
+docker run --rm -p 3100:3100 \
+  -e FAL_KEY="..." \
+  -e FIRECRAWL_API_KEY="..." \
+  -v ./twitter-cookies.env:/app/twitter-cookies.env:ro \
+  summarize-test
+```
+
+### Twitter Cookie Setup
+
+Bird CLI needs Twitter auth cookies. These expire weekly and need refreshing.
+
+1. Copy the example: `cp twitter-cookies.example.env twitter-cookies.env`
+2. Get cookies from browser:
+   - Open x.com, log in
+   - DevTools (F12) → Application → Cookies → x.com
+   - Copy `auth_token` → `AUTH_TOKEN`
+   - Copy `ct0` → `CT0`
+3. Mount when running Docker (see above)
+
+## Environment Variables
+
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `FAL_KEY` | FAL AI Whisper transcription | For YouTube audio |
+| `OPENAI_API_KEY` | OpenAI Whisper fallback | Alternative to FAL |
+| `FIRECRAWL_API_KEY` | Firecrawl scraping fallback | For JS-heavy sites |
+| `OPENROUTER_API_KEY` | OpenRouter for `--model auto` | Only if summarizing |
+| `AUTH_TOKEN` + `CT0` | Twitter cookies (or mount file) | For Twitter/X |
+
+## HTTP API
+
+### POST /extract
+
+```bash
+curl -X POST http://localhost:3100/extract \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "youtube": "manual"}'
+```
+
+Request body:
+```json
+{
+  "url": "https://...",
+  "timeout_ms": 120000,
+  "firecrawl": "auto",
+  "youtube": "auto|web|manual|yt-dlp|apify"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "extracted": {
+    "url": "...",
+    "title": "...",
+    "content": "...",
+    "transcriptSource": "captionTracks|yt-dlp|..."
+  },
+  "duration_ms": 1234
+}
+```
+
+## Local Development
 
 ```bash
 pnpm install
 pnpm build
-pnpm check  # lint + tests with coverage
+pnpm check  # lint + tests
+
+# Run CLI
+pnpm summarize "https://example.com" --extract-only
+
+# Run server
+pnpm build:all && node dist/server.cjs
 ```
 
-### Docker (with yt-dlp)
+## Files Modified from Upstream
 
-```bash
-docker build -f Dockerfile.test -t summarize-test .
-
-docker run --rm \
-  -e FAL_KEY="..." \
-  -e OPENROUTER_API_KEY="..." \
-  -e YT_DLP_PATH="/usr/local/bin/yt-dlp" \
-  summarize-test \
-  "https://youtu.be/VIDEO_ID" --model auto --youtube yt-dlp
-```
-
-### Example Commands
-
-```bash
-# YouTube with auto model selection
-summarize "https://youtu.be/cPE0f0uV3LM" --model auto --youtube yt-dlp
-
-# Web page extraction only (no LLM)
-summarize "https://example.com/article" --extract-only
-
-# Explicit model
-summarize "https://example.com" --model google/gemini-2.5-flash-lite-preview-09-2025
-```
-
-## Current State
-
-### PR #5: `--model auto` Feature
-- Branch: `model-auto`
-- Status: Ready for review
-- URL: https://github.com/steipete/summarize/pull/5
-- Added tests in `tests/cli.model-auto.test.ts` to meet 75% branch coverage threshold
-
-### Recent Fixes
-- **Exit hang fix**: Added `process.exit()` in `src/cli.ts` `.finally()` to avoid dangling handles from stream error listeners
-- **Dockerfile.test**: Changed entrypoint from `pnpm summarize` (tsx) to `node dist/cli.cjs` for clean exits
-
-### Files Modified from Upstream
-- `src/run.ts` - Added `parseOpenRouterAutoConfig()`, `resolveOpenRouterAutoModel()`, `--model auto` handling
-- `src/cli.ts` - Added `.finally()` exit fix
-- `Dockerfile.test` - Fixed entrypoint
-- `tests/cli.model-auto.test.ts` - New test file for auto model selection
-- `README.md`, `CHANGELOG.md` - Documentation
-
-## API Keys Location
-
-For local testing, keys are in:
-- `FAL_KEY`: `~/Documents/GitHub/chatpod-backend/.env`
-- `OPENROUTER_API_KEY`: `~/Documents/GitHub/chatpod-backend/.env` (as `OPENROUTER_KEY`)
-
-## How the LLM Call Works
-
-When summarizing via OpenRouter, the call is simple:
-
-```typescript
-streamTextWithModelId({
-  modelId: 'openai/gpt-oss-20b',  // or auto-selected
-  apiKeys: { openrouterApiKey: '...' },
-  openrouter: { providers: ['groq', 'clarifai/fp4', 'google-vertex'] },
-  prompt: '...',  // extracted content + summarize instructions
-  temperature: 0,
-  maxOutputTokens: ...,
-  timeoutMs: ...,
-})
-```
-
-**What's NOT passed** (unlike chatpod-backend):
-- No `json_schema` / `response_format` - returns plain text
-- No `reasoning` / thinking config
-- No `system` prompt separation
-
-This is intentional - summarize is a simple extraction/summarization tool. Chatpod-backend handles structured output and thinking modes in its own OpenRouter service.
-
-## Next Steps (Integration Plan)
-
-See plan file: `~/.claude/plans/unified-purring-yeti.md`
-
-1. **Phase 1**: Create HTTP wrapper (`src/server.ts`) with Fastify
-2. **Phase 2**: Create `Dockerfile.sidecar` for production
-3. **Phase 3**: Add `SummarizeService` to chatpod-backend
-4. **Phase 4**: Add `extraction_jobs` table and worker
-5. **Phase 5**: Wire up in docker-compose
-
-## Test Commands
-
-```bash
-# Run all tests with coverage
-pnpm check
-
-# Run specific test file
-pnpm test -- tests/cli.model-auto.test.ts
-
-# Run with verbose output
-pnpm test -- --reporter=verbose
-```
+- `src/server.ts` - HTTP server wrapper
+- `src/run.ts` - OpenRouter auto, help text updates
+- `src/flags.ts` - Added `manual` to YoutubeMode
+- `src/content/link-preview/transcript/providers/youtube.ts` - Manual mode handling
+- `src/content/link-preview/transcript/providers/youtube/captions.ts` - Caption priority fix, skipAutoGenerated
+- `Dockerfile.test` - Full media support (yt-dlp, bird, entrypoint)
+- `docker-entrypoint.sh` - Loads Twitter cookies from mounted file
+- `vitest.config.ts` - Adjusted coverage threshold to 74%
 
 ## Upstream Sync
 
 This fork tracks `steipete/summarize`. To sync:
 
 ```bash
-git fetch upstream
-git merge upstream/main
+git fetch origin
+git merge origin/main
 # Resolve conflicts, keeping our additions
 ```
 
-Current base: v0.3.0 (2025-12-20)
+## Git Remotes
+
+- `origin` = steipete/summarize (upstream)
+- `fork` = dougvk/summarize (this fork)
+
+Push changes to fork: `git push fork main`
