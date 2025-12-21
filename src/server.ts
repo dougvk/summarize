@@ -12,7 +12,7 @@ interface ExtractRequest {
   url: string
   timeout_ms?: number
   firecrawl?: 'auto' | 'always' | 'off'
-  youtube?: 'auto' | 'web' | 'yt-dlp' | 'apify'
+  youtube?: 'auto' | 'web' | 'yt-dlp' | 'apify' | 'manual'
 }
 
 interface ExtractedContent {
