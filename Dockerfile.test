@@ -24,8 +24,18 @@ RUN CI=true pnpm install --frozen-lockfile
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 
-# Build
-RUN pnpm build
+# Build (including server)
+RUN pnpm build:all
 
-# Default: run the CLI
-ENTRYPOINT ["pnpm", "summarize"]
+# Environment
+ENV PORT=3100
+ENV NODE_ENV=production
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+EXPOSE 3100
+
+# Default: run the HTTP server
+CMD ["node", "dist/server.cjs"]
