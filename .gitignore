@@ -7,3 +7,6 @@ coverage
 .pnpm-debug.log
 .turbo
 .cache
+
+# Twitter cookies (contains secrets)
+twitter-cookies.env

@@ -30,6 +30,10 @@ COPY scripts/ ./scripts/
 # Build (including server)
 RUN pnpm build:all
 
+# Copy entrypoint script (loads Twitter cookies from mounted file)
+COPY docker-entrypoint.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Environment
 ENV PORT=3100
 ENV NODE_ENV=production
@@ -40,5 +44,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 EXPOSE 3100
 
-# Default: run the HTTP server
+# Entrypoint loads env from /app/twitter-cookies.env if mounted
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "dist/server.cjs"]
