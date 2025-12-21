@@ -96,11 +96,11 @@ app.post<{ Body: ExtractRequest }>('/extract', async (request, reply) => {
         output += chunk.toString()
         return true
       },
-    } as NodeJS.WritableStream
+    } as unknown as NodeJS.WritableStream
 
     const stderr = {
       write: (): boolean => true,
-    } as NodeJS.WritableStream
+    } as unknown as NodeJS.WritableStream
 
     await runCli(args, {
       env: process.env as Record<string, string | undefined>,
