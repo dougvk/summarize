@@ -18,6 +18,7 @@ describe('cli flag parsing', () => {
     expect(parseYoutubeMode('web')).toBe('web')
     expect(parseYoutubeMode('apify')).toBe('apify')
     expect(parseYoutubeMode('yt-dlp')).toBe('yt-dlp')
+    expect(parseYoutubeMode('manual')).toBe('manual')
     expect(parseYoutubeMode('autp')).toBe('auto')
     expect(() => parseYoutubeMode('nope')).toThrow(/Unsupported --youtube/)
   })

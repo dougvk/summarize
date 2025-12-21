@@ -45,4 +45,33 @@ describe('YouTube Apify transcript provider', () => {
       await fetchTranscriptWithApify(fetchNotArray as unknown as typeof fetch, 'TOKEN', 'url')
     ).toBeNull()
   })
+
+  it('returns null when fetch throws', async () => {
+    const fetchThrows = vi.fn(async () => {
+      throw new Error('Network error')
+    })
+    expect(
+      await fetchTranscriptWithApify(fetchThrows as unknown as typeof fetch, 'TOKEN', 'url')
+    ).toBeNull()
+  })
+
+  it('skips non-record items in payload array', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        [
+          null,
+          'string item',
+          123,
+          {
+            data: [{ start: '0', dur: '1', text: 'Valid line' }],
+          },
+        ],
+        { status: 200 }
+      )
+    )
+
+    expect(
+      await fetchTranscriptWithApify(fetchMock as unknown as typeof fetch, 'TOKEN', 'url')
+    ).toBe('Valid line')
+  })
 })
