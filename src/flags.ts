@@ -1,6 +1,6 @@
 import type { SummaryLength } from './shared/contracts.js'
 
-export type YoutubeMode = 'auto' | 'web' | 'apify' | 'yt-dlp'
+export type YoutubeMode = 'auto' | 'web' | 'apify' | 'yt-dlp' | 'manual'
 export type FirecrawlMode = 'off' | 'auto' | 'always'
 export type MarkdownMode = 'off' | 'auto' | 'llm'
 export type StreamMode = 'auto' | 'on' | 'off'
@@ -22,6 +22,7 @@ export function parseYoutubeMode(raw: string): YoutubeMode {
   if (normalized === 'autp') return 'auto'
   if (normalized === 'auto' || normalized === 'web' || normalized === 'apify') return normalized
   if (normalized === 'yt-dlp') return 'yt-dlp'
+  if (normalized === 'manual') return 'manual'
   throw new Error(`Unsupported --youtube: ${raw}`)
 }
 

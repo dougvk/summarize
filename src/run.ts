@@ -269,7 +269,7 @@ function buildProgram() {
     .argument('[input]', 'URL or local file path to summarize')
     .option(
       '--youtube <mode>',
-      'YouTube transcript source: auto, web (youtubei/captionTracks), yt-dlp (audio+whisper), apify',
+      'YouTube transcript source: auto, web, manual (skip auto-captions), yt-dlp (audio+whisper), apify',
       'auto'
     )
     .option(
