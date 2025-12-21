@@ -3,6 +3,8 @@ export type TranscriptSource =
   | 'captionTracks'
   | 'yt-dlp'
   | 'apify'
+  | 'audio-fal'
+  | 'audio-openai'
   | 'html'
   | 'unavailable'
   | 'unknown'

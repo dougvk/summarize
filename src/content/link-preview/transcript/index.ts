@@ -2,6 +2,10 @@ import type { LinkPreviewDeps } from '../deps.js'
 import type { CacheMode, TranscriptDiagnostics, TranscriptResolution } from '../types.js'
 import { mapCachedSource, readTranscriptCache, writeTranscriptCache } from './cache.js'
 import {
+  canHandle as canHandleAudio,
+  fetchTranscript as fetchAudio,
+} from './providers/audio.js'
+import {
   canHandle as canHandleGeneric,
   fetchTranscript as fetchGeneric,
 } from './providers/generic.js'
@@ -31,6 +35,7 @@ interface ResolveTranscriptOptions {
 
 const PROVIDERS: ProviderModule[] = [
   { id: 'youtube', canHandle: canHandleYoutube, fetchTranscript: fetchYoutube },
+  { id: 'audio', canHandle: canHandleAudio, fetchTranscript: fetchAudio },
   { id: 'podcast', canHandle: canHandlePodcast, fetchTranscript: fetchPodcast },
   { id: 'generic', canHandle: canHandleGeneric, fetchTranscript: fetchGeneric },
 ]
